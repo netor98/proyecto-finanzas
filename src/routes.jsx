@@ -1,13 +1,16 @@
 import { SignIn, SignUp } from "@/pages/auth";
-import { Finances, Home, Notifications, Profile, Tables } from "@/pages/dashboard";
+import { Analytics, Budgets, Categories, Debts, Finances, Goals, Home, Reminders } from "@/pages/dashboard";
 import {
+  BellAlertIcon,
+  ChartBarIcon,
+  CreditCardIcon,
   CurrencyDollarIcon,
   HomeIcon,
-  InformationCircleIcon,
+  PresentationChartLineIcon,
   RectangleStackIcon,
   ServerStackIcon,
-  TableCellsIcon,
-  UserCircleIcon,
+  TagIcon,
+  TrophyIcon,
 } from "@heroicons/react/24/solid";
 
 const icon = {
@@ -31,22 +34,40 @@ export const routes = [
         element: <Finances />,
       },
       {
-        icon: <UserCircleIcon {...icon} />,
-        name: "profile",
-        path: "/profile",
-        element: <Profile />,
+        icon: <ChartBarIcon {...icon} />,
+        name: "presupuestos",
+        path: "/budgets",
+        element: <Budgets />,
       },
       {
-        icon: <TableCellsIcon {...icon} />,
-        name: "tables",
-        path: "/tables",
-        element: <Tables />,
+        icon: <PresentationChartLineIcon {...icon} />,
+        name: "análisis",
+        path: "/analytics",
+        element: <Analytics />,
       },
       {
-        icon: <InformationCircleIcon {...icon} />,
-        name: "notifications",
-        path: "/notifications",
-        element: <Notifications />,
+        icon: <BellAlertIcon {...icon} />,
+        name: "recordatorios",
+        path: "/reminders",
+        element: <Reminders />,
+      },
+      {
+        icon: <TrophyIcon {...icon} />,
+        name: "metas",
+        path: "/goals",
+        element: <Goals />,
+      },
+      {
+        icon: <CreditCardIcon {...icon} />,
+        name: "deudas",
+        path: "/debts",
+        element: <Debts />,
+      },
+      {
+        icon: <TagIcon {...icon} />,
+        name: "categorías",
+        path: "/categories",
+        element: <Categories />,
       },
     ],
   },

@@ -1,0 +1,11 @@
+nombre,descripcion,categoria,monto_objetivo,monto_actual,fecha_limite,ahorro_automatico,monto_ahorro,frecuencia_ahorro,dia_mes
+Fondo de Emergencia,Colchón financiero para imprevistos,emergency,10000,2500,2026-12-31,true,400,monthly,1
+Vacaciones Europa 2026,Viaje familiar a 5 países europeos,vacation,8000,3200,2026-07-15,true,300,biweekly,
+iPhone 15 Pro,Compra de smartphone nuevo,purchase,1200,450,2026-03-31,false,,,
+Enganche Casa,30% para compra de vivienda,home,25000,8000,2027-06-30,true,500,monthly,5
+Maestría en Administración,Colegiatura completa de posgrado,education,15000,4500,2027-09-01,true,350,monthly,10
+Seguro Médico Familiar,Póliza anual de gastos médicos mayores,health,5000,2000,2026-04-30,true,250,monthly,15
+Laptop Gamer,Computadora de alto rendimiento,purchase,2500,800,,,false,,,
+Remodelación Cocina,Renovación completa de cocina,home,12000,0,2027-03-31,true,200,monthly,1
+Curso de Inglés,Certificación TOEFL con clases,education,3500,1200,2026-08-31,true,150,biweekly,
+Fondo de Retiro,Ahorro complementario para jubilación,other,50000,10000,,true,600,monthly,1

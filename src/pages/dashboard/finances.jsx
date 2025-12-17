@@ -27,38 +27,20 @@ import {
   Typography
 } from "@material-tailwind/react";
 import { useEffect, useState } from "react";
-
-// Categorías predefinidas
-const CATEGORIES = {
-  income: [
-    "Salario",
-    "Freelance",
-    "Inversiones",
-    "Bonos",
-    "Ventas",
-    "Otros Ingresos",
-  ],
-  expense: [
-    "Comida",
-    "Transporte",
-    "Servicios",
-    "Entretenimiento",
-    "Salud",
-    "Educación",
-    "Hogar",
-    "Ropa",
-    "Tecnología",
-    "Otros Gastos",
-  ],
-};
+import { api } from "@/services/api";
+import { mapTransactionToBackend, mapTransactionFromBackend } from "@/services/dataMapper";
+import { useAuth } from "@/context/AuthContext";
 
 export function Finances() {
   const [transactions, setTransactions] = useState([]);
+  const [categories, setCategories] = useState([]);
   const [openDialog, setOpenDialog] = useState(false);
   const [openImportDialog, setOpenImportDialog] = useState(false);
   const [filterType, setFilterType] = useState("all");
   const [filterCategory, setFilterCategory] = useState("all");
   const [editingTransaction, setEditingTransaction] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
   // New filters and pagination state
   const [search, setSearch] = useState("");
   const [dateFrom, setDateFrom] = useState("");
@@ -67,6 +49,7 @@ export function Finances() {
   const [amountMax, setAmountMax] = useState("");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
+  const { isAuthenticated } = useAuth();
 
   const [formData, setFormData] = useState({
     type: "expense",
@@ -76,20 +59,58 @@ export function Finances() {
     date: new Date().toISOString().split("T")[0],
   });
 
-  // Cargar transacciones desde localStorage
+  // Cargar transacciones y categorías desde API
   useEffect(() => {
-    const savedTransactions = localStorage.getItem("transactions");
-    if (savedTransactions) {
-      setTransactions(JSON.parse(savedTransactions));
+    if (isAuthenticated) {
+      loadTransactions();
+      loadCategories();
     }
-  }, []);
+  }, [isAuthenticated]);
 
-  // Guardar transacciones en localStorage
-  useEffect(() => {
-    if (transactions.length > 0) {
-      localStorage.setItem("transactions", JSON.stringify(transactions));
+  const loadCategories = async () => {
+    try {
+      const response = await api.getCategories();
+      if (response.success) {
+        setCategories(response.data || []);
+      }
+    } catch (err) {
+      console.error("Error loading categories:", err);
     }
-  }, [transactions]);
+  };
+
+  // Obtener categorías filtradas por tipo
+  const getCategoriesByType = (type) => {
+    return categories
+      .filter((cat) => cat.type === type)
+      .map((cat) => cat.name);
+  };
+
+  // Obtener todas las categorías (para filtros)
+  const getAllCategoryNames = () => {
+    return categories.map((cat) => cat.name);
+  };
+
+  const loadTransactions = async () => {
+    setLoading(true);
+    setError("");
+    try {
+      const filters = {};
+      if (filterType !== "all") filters.type = filterType;
+      if (dateFrom) filters.start_date = dateFrom;
+      if (dateTo) filters.end_date = dateTo;
+
+      const response = await api.getTransactions(filters);
+      if (response.success) {
+        const mapped = response.data.map(mapTransactionFromBackend);
+        setTransactions(mapped);
+      }
+    } catch (err) {
+      setError(err.message || "Error loading transactions");
+      console.error("Error loading transactions:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // Calcular estadísticas
   const calculateStats = () => {
@@ -109,7 +130,7 @@ export function Finances() {
   const stats = calculateStats();
 
   // Manejar envío del formulario
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
 
     if (!formData.amount || !formData.category) {
@@ -117,24 +138,39 @@ export function Finances() {
       return;
     }
 
-    const transaction = {
-      id: editingTransaction ? editingTransaction.id : Date.now(),
-      ...formData,
-      amount: parseFloat(formData.amount),
-      createdAt: editingTransaction ? editingTransaction.createdAt : new Date().toISOString(),
-    };
+    setLoading(true);
+    setError("");
 
-    if (editingTransaction) {
-      setTransactions(transactions.map((t) =>
-        t.id === editingTransaction.id ? transaction : t
-      ));
-      setEditingTransaction(null);
-    } else {
-      setTransactions([transaction, ...transactions]);
+    try {
+      const backendData = await mapTransactionToBackend(api, formData);
+
+      if (editingTransaction) {
+        const response = await api.updateTransaction(editingTransaction.id, backendData);
+        if (response.success) {
+          const updated = mapTransactionFromBackend(response.data);
+          setTransactions(transactions.map((t) =>
+            t.id === editingTransaction.id ? updated : t
+          ));
+          setEditingTransaction(null);
+        }
+      } else {
+        const response = await api.createTransaction(backendData);
+        if (response.success) {
+          const newTransaction = mapTransactionFromBackend(response.data);
+          setTransactions([newTransaction, ...transactions]);
+        }
+      }
+
+      resetForm();
+      setOpenDialog(false);
+      // Recargar categorías por si se creó una nueva
+      loadCategories();
+    } catch (err) {
+      setError(err.message || "Error saving transaction");
+      alert(err.message || "Error saving transaction");
+    } finally {
+      setLoading(false);
     }
-
-    resetForm();
-    setOpenDialog(false);
   };
 
   const resetForm = () => {
@@ -153,7 +189,7 @@ export function Finances() {
     if (!file) return;
 
     const reader = new FileReader();
-    reader.onload = (event) => {
+    reader.onload = async (event) => {
       try {
         const content = event.target.result;
         const lines = content.split("\n");
@@ -187,12 +223,26 @@ export function Finances() {
           }
         }
 
-        setTransactions([...importedTransactions, ...transactions]);
+        // Import transactions one by one
+        setLoading(true);
+        let successCount = 0;
+        for (const transaction of importedTransactions) {
+          try {
+            const backendData = await mapTransactionToBackend(api, transaction);
+            await api.createTransaction(backendData);
+            successCount++;
+          } catch (err) {
+            console.error("Error importing transaction:", err);
+          }
+        }
+        setLoading(false);
         setOpenImportDialog(false);
-        alert(`Se importaron ${importedTransactions.length} transacciones exitosamente`);
+        alert(`Se importaron ${successCount} de ${importedTransactions.length} transacciones exitosamente`);
+        loadTransactions(); // Reload all transactions
       } catch (error) {
         alert("Error al importar el archivo. Verifica el formato CSV.");
         console.error(error);
+        setLoading(false);
       }
     };
 
@@ -238,9 +288,18 @@ export function Finances() {
   }, [page, totalPages]);
 
   // Eliminar transacción
-  const handleDelete = (id) => {
+  const handleDelete = async (id) => {
     if (window.confirm("¿Estás seguro de eliminar esta transacción?")) {
-      setTransactions(transactions.filter((t) => t.id !== id));
+      setLoading(true);
+      try {
+        await api.deleteTransaction(id);
+        setTransactions(transactions.filter((t) => t.id !== id));
+      } catch (err) {
+        setError(err.message || "Error deleting transaction");
+        alert(err.message || "Error deleting transaction");
+      } finally {
+        setLoading(false);
+      }
     }
   };
 
@@ -398,9 +457,9 @@ export function Finances() {
                     className="bg-white"
                   >
                     <Option value="all">Todas las categorías</Option>
-                    {[...CATEGORIES.income, ...CATEGORIES.expense].map((cat) => (
-                      <Option key={cat} value={cat}>
-                        {cat}
+                    {getAllCategoryNames().map((catName) => (
+                      <Option key={catName} value={catName}>
+                        {catName}
                       </Option>
                     ))}
                   </Select>
@@ -679,12 +738,19 @@ export function Finances() {
                 label="Categoría"
                 value={formData.category}
                 onChange={(val) => setFormData({ ...formData, category: val })}
+                required
               >
-                {CATEGORIES[formData.type].map((cat) => (
-                  <Option key={cat} value={cat}>
-                    {cat}
+                {getCategoriesByType(formData.type).length > 0 ? (
+                  getCategoriesByType(formData.type).map((catName) => (
+                    <Option key={catName} value={catName}>
+                      {catName}
+                    </Option>
+                  ))
+                ) : (
+                  <Option value="" disabled>
+                    No hay categorías de {formData.type === "income" ? "ingresos" : "gastos"}. Crea una en la sección de Categorías.
                   </Option>
-                ))}
+                )}
               </Select>
             </div>
 
