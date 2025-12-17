@@ -33,10 +33,14 @@ export function Dashboard() {
     return <Navigate to="/auth/sign-in" replace />;
   }
 
+  // Filter out auth routes from sidebar
+  const dashboardRoutes = routes.filter((route) => route.layout === "dashboard");
+
   return (
     <div className="min-h-screen bg-blue-gray-50/50">
       <Sidenav
-        routes={routes}
+        routes={dashboardRoutes}
+        brandName="Personal Finances"
         brandImg={
           sidenavType === "dark" ? "/img/logo-ct.png" : "/img/logo-ct-dark.png"
         }

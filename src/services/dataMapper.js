@@ -164,19 +164,47 @@ export function mapBudgetFromBackend(backendBudget) {
  * Map frontend debt to backend format
  */
 export function mapDebtToBackend(frontendDebt) {
+  // Calcular due_day desde nextPaymentDate si está disponible
+  let dueDay = 1; // Valor por defecto (requerido por la BD)
+
+  if (frontendDebt.nextPaymentDate || frontendDebt.next_payment_date) {
+    try {
+      const paymentDate = new Date(frontendDebt.nextPaymentDate || frontendDebt.next_payment_date);
+      if (!isNaN(paymentDate.getTime())) {
+        dueDay = paymentDate.getDate();
+        // Asegurar que esté entre 1 y 31
+        if (dueDay < 1 || dueDay > 31) {
+          dueDay = 1;
+        }
+      }
+    } catch (e) {
+      // Si hay error, usar valor por defecto
+      dueDay = 1;
+    }
+  } else if (frontendDebt.dueDay || frontendDebt.due_day) {
+    const parsed = parseInt(frontendDebt.dueDay || frontendDebt.due_day);
+    if (!isNaN(parsed) && parsed >= 1 && parsed <= 31) {
+      dueDay = parsed;
+    }
+  }
+
+  // Asegurar que remaining_amount sea igual a total_amount si no se proporciona
+  const totalAmount = parseFloat(frontendDebt.principal || frontendDebt.total_amount || 0);
+  const remainingAmount = frontendDebt.currentBalance !== undefined && frontendDebt.currentBalance !== ""
+    ? parseFloat(frontendDebt.currentBalance || frontendDebt.current_balance || 0)
+    : totalAmount;
+
   return {
     name: frontendDebt.name,
-    description: frontendDebt.description || null,
-    total_amount: parseFloat(frontendDebt.principal),
-    current_balance: parseFloat(frontendDebt.currentBalance || frontendDebt.current_balance),
-    interest_rate: parseFloat(frontendDebt.interestRate || frontendDebt.interest_rate || 0),
-    minimum_payment: parseFloat(frontendDebt.minimumPayment || frontendDebt.minimum_payment || 0),
-    payment_amount: parseFloat(frontendDebt.paymentAmount || frontendDebt.payment_amount || 0),
-    payment_frequency: frontendDebt.paymentFrequency || frontendDebt.payment_frequency || 'monthly',
-    next_payment_date: frontendDebt.nextPaymentDate || frontendDebt.next_payment_date || null,
-    start_date: frontendDebt.startDate || frontendDebt.start_date || null,
-    creditor: frontendDebt.creditor || null,
-    account_number: frontendDebt.accountNumber || frontendDebt.account_number || null,
+    total_amount: totalAmount,
+    remaining_amount: remainingAmount,
+    interest_rate: frontendDebt.interestRate && frontendDebt.interestRate !== ""
+      ? parseFloat(frontendDebt.interestRate || frontendDebt.interest_rate)
+      : null,
+    minimum_payment: frontendDebt.minimumPayment && frontendDebt.minimumPayment !== ""
+      ? parseFloat(frontendDebt.minimumPayment || frontendDebt.minimum_payment)
+      : null,
+    due_day: dueDay, // Requerido por la base de datos (NOT NULL)
   };
 }
 
@@ -184,22 +212,42 @@ export function mapDebtToBackend(frontendDebt) {
  * Map backend debt to frontend format
  */
 export function mapDebtFromBackend(backendDebt) {
+  // Calcular nextPaymentDate desde due_day si está disponible
+  let nextPaymentDate = null;
+  if (backendDebt.due_day) {
+    const today = new Date();
+    const currentMonth = today.getMonth();
+    const currentYear = today.getFullYear();
+    const dueDay = parseInt(backendDebt.due_day);
+
+    // Crear fecha para el día de vencimiento del mes actual
+    const paymentDate = new Date(currentYear, currentMonth, dueDay);
+
+    // Si ya pasó este mes, usar el próximo mes
+    if (paymentDate < today) {
+      paymentDate.setMonth(currentMonth + 1);
+    }
+
+    nextPaymentDate = paymentDate.toISOString().split('T')[0];
+  }
+
   return {
     id: backendDebt.id,
     name: backendDebt.name,
     description: backendDebt.description || '',
     type: backendDebt.type || 'other',
     principal: parseFloat(backendDebt.total_amount),
-    currentBalance: parseFloat(backendDebt.current_balance),
+    currentBalance: parseFloat(backendDebt.remaining_amount || 0),
     interestRate: parseFloat(backendDebt.interest_rate || 0),
-    paymentAmount: parseFloat(backendDebt.payment_amount || 0),
-    paymentFrequency: backendDebt.payment_frequency || 'monthly',
-    nextPaymentDate: backendDebt.next_payment_date,
+    paymentAmount: parseFloat(backendDebt.minimum_payment || 0),
+    paymentFrequency: 'monthly', // Default
+    nextPaymentDate: nextPaymentDate,
     minimumPayment: parseFloat(backendDebt.minimum_payment || 0),
     creditor: backendDebt.creditor || '',
     accountNumber: backendDebt.account_number || '',
-    startDate: backendDebt.start_date,
-    active: backendDebt.status === 'active' || parseFloat(backendDebt.current_balance) > 0,
+    startDate: backendDebt.start_date || new Date().toISOString().split('T')[0],
+    dueDay: backendDebt.due_day || 1,
+    active: parseFloat(backendDebt.remaining_amount || 0) > 0,
     autoReminder: true,
     reminderDays: '3',
     createdAt: backendDebt.created_at,
